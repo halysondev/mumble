@@ -5,10 +5,10 @@
 
 #include "VolumeSliderWidgetAction.h"
 
-#include "MumbleApplication.h"
 #include "VolumeAdjustment.h"
 #include "widgets/EventFilters.h"
 
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSlider>
@@ -87,7 +87,7 @@ VolumeSliderWidgetAction::VolumeSliderWidgetAction(QWidget *parent)
 }
 
 void VolumeSliderWidgetAction::updateLabelValue(bool checkMouseButtons) {
-	if (checkMouseButtons && MumbleApplication::instance()->mouseButtons() != Qt::NoButton) {
+	if (checkMouseButtons && QApplication::mouseButtons() != Qt::NoButton) {
 		// Do not update the label while the user is dragging the slider.
 		// This will otherwise cause a glitchy experience.
 		return;

@@ -6,10 +6,13 @@
 #include "QtUtils.h"
 
 #include <QObject>
+#include <QCoreApplication>
 #include <QStringList>
 #include <QUrl>
 
 #include <filesystem>
+
+#include "EnvUtils.h"
 
 namespace Mumble {
 namespace QtUtils {
@@ -18,6 +21,20 @@ namespace QtUtils {
 	QString decode_utf8_qssl_string(const QString &input) {
 		QString i = input;
 		return QUrl::fromPercentEncoding(i.replace(QLatin1String("\\x"), QLatin1String("%")).toLatin1());
+	}
+
+	QString applicationVersionRootPath() {
+		QString versionRoot = EnvUtils::getenv(QLatin1String("MUMBLE_VERSION_ROOT"));
+		if (!versionRoot.isEmpty()) {
+			return versionRoot;
+		}
+
+		QCoreApplication *app = QCoreApplication::instance();
+		if (app) {
+			return app->applicationDirPath();
+		}
+
+		return QString();
 	}
 
 	QString decode_first_utf8_qssl_string(const QStringList &list) {

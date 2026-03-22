@@ -25,6 +25,8 @@
 #include "PluginInstaller.h"
 #include "PluginUpdater.h"
 #include "ProcessResolver.h"
+#include "QtUtils.h"
+#include "SDKHooks.h"
 #include "ServerHandler.h"
 #include "Global.h"
 
@@ -72,7 +74,7 @@ PluginManager::PluginManager(QSet< QString > *additionalSearchPaths, QObject *p)
 	// Path to "plugins" dir right next to the executable's location. This is the case for when Mumble
 	// is run after compilation without having installed it anywhere special
 	pluginPaths.push_back(
-		QString::fromLatin1("%1/plugins").arg(MumbleApplication::instance()->applicationVersionRootPath()));
+		QString::fromLatin1("%1/plugins").arg(Mumble::QtUtils::applicationVersionRootPath()));
 
 	// Path to where the plugin installer will write plugins
 	pluginPaths.push_back(PluginInstaller::getInstallDir());
@@ -406,6 +408,33 @@ bool PluginManager::fetchPositionalData() {
 		return true;
 	}
 
+	if (Mumble::SDK::Hooks::hasClientPositionalDataProvider()) {
+		QWriteLocker posDataLock(&m_positionalData.m_lock);
+
+		bool retStatus = Mumble::SDK::Hooks::fetchClientPositionalData(
+			reinterpret_cast< float * >(&m_positionalData.m_playerPos),
+			reinterpret_cast< float * >(&m_positionalData.m_playerDir),
+			reinterpret_cast< float * >(&m_positionalData.m_playerAxis),
+			reinterpret_cast< float * >(&m_positionalData.m_cameraPos),
+			reinterpret_cast< float * >(&m_positionalData.m_cameraDir),
+			reinterpret_cast< float * >(&m_positionalData.m_cameraAxis), m_positionalData.m_context,
+			m_positionalData.m_identity);
+
+		if (!retStatus) {
+			m_positionalData.reset();
+			return false;
+		}
+
+		if (m_positionalData.m_playerPos == Position3D(0.0f, 0.0f, 0.0f)) {
+			m_positionalData.m_playerPos = { 0.0f, 0.0f, std::numeric_limits< float >::min() };
+		}
+		if (m_positionalData.m_cameraPos == Position3D(0.0f, 0.0f, 0.0f)) {
+			m_positionalData.m_cameraPos = { 0.0f, 0.0f, std::numeric_limits< float >::min() };
+		}
+
+		return true;
+	}
+
 	QReadLocker activePluginLock(&m_activePosDataPluginLock);
 
 	if (!m_activePositionalDataPlugin) {
@@ -472,6 +501,10 @@ void PluginManager::unlinkPositionalData() {
 }
 
 bool PluginManager::isPositionalDataAvailable() const {
+	if (Mumble::SDK::Hooks::hasClientPositionalDataProvider()) {
+		return true;
+	}
+
 	QReadLocker lock(&m_activePosDataPluginLock);
 
 	return m_activePositionalDataPlugin != nullptr;
@@ -990,6 +1023,10 @@ void PluginManager::on_updatesAvailable() {
 }
 
 void PluginManager::checkForAvailablePositionalDataPlugin() {
+	if (Mumble::SDK::Hooks::hasClientPositionalDataProvider()) {
+		return;
+	}
+
 	bool performSearch = false;
 	{
 		QReadLocker activePluginLock(&m_activePosDataPluginLock);

@@ -1,0 +1,66 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "sdk-windows-static",
+      "displayName": "SDK Windows Static",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-sdk-windows-static",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build_env/mumble_env.x64-windows-static-md.b1fe4a4257/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "Ice_HOME": "${sourceDir}/build_env/mumble_env.x64-windows-static-md.b1fe4a4257/installed/x64-windows-static-md",
+        "static": "ON",
+        "client": "OFF",
+        "server": "OFF",
+        "sdk": "ON",
+        "sdk-client": "ON",
+        "sdk-server": "ON",
+        "overlay": "OFF",
+        "plugins": "OFF",
+        "tests": "OFF",
+        "bundled-spdlog": "OFF",
+        "bundled-cli11": "OFF"
+      }
+    },
+    {
+      "name": "sdk-linux-static",
+      "displayName": "SDK Linux Static",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-sdk-linux-static",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build_env/mumble_env.x64-linux.b1fe4a4257/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "Ice_HOME": "${sourceDir}/build_env/mumble_env.x64-linux.b1fe4a4257/installed/x64-linux",
+        "static": "ON",
+        "client": "OFF",
+        "server": "OFF",
+        "sdk": "ON",
+        "sdk-client": "ON",
+        "sdk-server": "ON",
+        "overlay": "OFF",
+        "plugins": "OFF",
+        "tests": "OFF",
+        "bundled-spdlog": "OFF",
+        "bundled-cli11": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "sdk-windows-static",
+      "configurePreset": "sdk-windows-static"
+    },
+    {
+      "name": "sdk-linux-static",
+      "configurePreset": "sdk-linux-static"
+    }
+  ]
+}

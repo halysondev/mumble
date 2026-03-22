@@ -38,8 +38,10 @@ set_property(TARGET mumble_server_database PROPERTY INTERPROCEDURAL_OPTIMIZATION
 find_pkg(Boost 1.62.0 REQUIRED)
 
 target_link_libraries(mumble_server_database PUBLIC mumble_database Boost::headers)
+target_link_libraries(mumble_server_database PRIVATE nlohmann_json::nlohmann_json)
 
 target_include_directories(mumble_server_database
 	PUBLIC
-		"${SHARED_SOURCE_DIR}"
+		$<BUILD_INTERFACE:${SHARED_SOURCE_DIR}>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

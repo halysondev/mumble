@@ -60,6 +60,9 @@ option(use-timestamps "Allow using compile-time timestamps" ON)
 
 option(client "Build the client (Mumble)" ON)
 option(server "Build the server (Murmur)" ON)
+option(sdk "Build the embeddable Mumble SDK." OFF)
+option(sdk-client "Build the client SDK target." ${sdk})
+option(sdk-server "Build the server SDK target." ${sdk})
 option(packaging "Build package." OFF)
 option(tests "Build tests." ${packaging})
 option(plugins "Build plugins." ON)
@@ -70,8 +73,8 @@ endif()
 
 option(debug-dependency-search "Prints extended information during the search for the needed dependencies" OFF)
 
-if(NOT CMAKE_BUILD_TYPE)
-	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY VALUE "Release")
+if(NOT CMAKE_BUILD_TYPE AND NOT IS_MULTI_CONFIG)
+	set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(
         "-DDEBUG"
@@ -240,7 +243,7 @@ if (packaging AND WIN32)
 	message(STATUS "Using VC redist >= ${VC_REDIST_VERSION} as dependency")
 endif()
 
-if(client OR server)
+if(client OR server OR sdk-client OR sdk-server)
 	add_subdirectory(src)
 endif()
 

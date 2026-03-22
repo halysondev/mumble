@@ -18,7 +18,7 @@ option(ice "Build support for Ice RPC." ON)
 
 find_pkg(Qt6 COMPONENTS Sql REQUIRED)
 
-add_library(mumble_server_object_lib OBJECT
+add_library(mumble_server_object_lib STATIC
 	"AudioReceiverBuffer.cpp"
 	"AudioReceiverBuffer.h"
 	"Cert.cpp"
@@ -52,15 +52,23 @@ add_library(mumble_server_object_lib OBJECT
 	"${SHARED_SOURCE_DIR}/User.h"
 )
 
-if(WIN32)
-	add_executable(mumble-server WIN32 "main.cpp")
-else()
-	add_executable(mumble-server "main.cpp")
+if(sdk-server AND NOT server)
+	target_compile_definitions(mumble_server_object_lib PUBLIC "MUMBLE_SERVER_NO_GUI")
 endif()
 
-target_link_libraries(mumble-server mumble_server_object_lib CLI11::CLI11)
+if(server)
+	if(WIN32)
+		add_executable(mumble-server WIN32 "main.cpp")
+	else()
+		add_executable(mumble-server "main.cpp")
+	endif()
 
-set_property(TARGET mumble-server PROPERTY INTERPROCEDURAL_OPTIMIZATION ${lto})
+	target_link_libraries(mumble-server mumble_server_object_lib CLI11::CLI11)
+endif()
+
+if(server)
+	set_property(TARGET mumble-server PROPERTY INTERPROCEDURAL_OPTIMIZATION ${lto})
+endif()
 set_property(TARGET mumble_server_object_lib PROPERTY INTERPROCEDURAL_OPTIMIZATION ${lto})
 
 set_target_properties(mumble_server_object_lib
@@ -68,11 +76,13 @@ set_target_properties(mumble_server_object_lib
 		AUTOMOC ON
 )
 
-set_target_properties(mumble-server
-	PROPERTIES
-		AUTOMOC ON
-		RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-)
+if(server)
+	set_target_properties(mumble-server
+		PROPERTIES
+			AUTOMOC ON
+			RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+	)
+endif()
 
 set(AUTOGEN_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/murmur_autogen")
 message(STATUS "File: ${AUTOGEN_BUILD_DIR}")
@@ -86,11 +96,13 @@ target_compile_definitions(mumble_server_object_lib
 
 target_include_directories(mumble_server_object_lib
 	PUBLIC
-		${CMAKE_CURRENT_SOURCE_DIR} # This is required for includes in current folder to be found by files from the shared directory.
-		${SHARED_SOURCE_DIR}
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${SHARED_SOURCE_DIR}>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_link_libraries(mumble_server_object_lib PUBLIC shared Qt6::Sql)
+target_link_libraries(mumble_server_object_lib PRIVATE nlohmann_json::nlohmann_json)
 
 if(static)
 	# MariaDB and MySQL
@@ -119,7 +131,7 @@ if(static)
 	endif()
 endif()
 
-if(WIN32)
+if(WIN32 AND server)
 	target_sources(mumble_server_object_lib
 		PRIVATE
 			"About.cpp"
@@ -151,6 +163,13 @@ if(WIN32)
 		include_qt_plugin(mumble_server_object_lib PRIVATE QWindowsIntegrationPlugin)
 		target_link_libraries(mumble_server_object_lib PRIVATE Qt6::QWindowsIntegrationPlugin)
 	endif()
+elseif(WIN32)
+	target_link_libraries(mumble_server_object_lib
+		PUBLIC
+			dbghelp.lib
+			shlwapi.lib
+			rpcrt4.lib
+	)
 else()
 	target_sources(mumble_server_object_lib
 		PRIVATE
@@ -181,7 +200,7 @@ if(zeroconf)
 
 	target_compile_definitions(mumble_server_object_lib PUBLIC "USE_ZEROCONF")
 
-	target_include_directories(mumble_server_object_lib PUBLIC "${3RDPARTY_DIR}/qqbonjour")
+	target_include_directories(mumble_server_object_lib PUBLIC $<BUILD_INTERFACE:${3RDPARTY_DIR}/qqbonjour>)
 
 	target_sources(mumble_server_object_lib
 		PRIVATE
@@ -262,7 +281,7 @@ if(ice)
 			"ICE_STATIC_LIBS"
 	)
 
-	target_include_directories(mumble_server_object_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+	target_include_directories(mumble_server_object_lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
 	if(static)
 		# BZip2 is used by Ice, specifically in ConnectionI.cpp.
@@ -283,9 +302,11 @@ if(ice)
 	file(COPY "${ICE_FILE}" DESTINATION ${CMAKE_BINARY_DIR})
 endif()
 
-install(TARGETS mumble-server RUNTIME DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_server)
+if(server)
+	install(TARGETS mumble-server RUNTIME DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_server)
+endif()
 
-if(packaging)
+if(server AND packaging)
 	if(WIN32)
 		if(translations)
 			list(APPEND installer_vars "--all-languages")

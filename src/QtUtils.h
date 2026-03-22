@@ -31,6 +31,15 @@ namespace QtUtils {
 	QString decode_utf8_qssl_string(const QString &input);
 
 	/**
+	 * Returns the application's version-root path.
+	 *
+	 * This mirrors the behavior of MumbleApplication::applicationVersionRootPath()
+	 * while remaining usable from embedders that do not instantiate the
+	 * MumbleApplication subclass.
+	 */
+	QString applicationVersionRootPath();
+
+	/**
 	 * Applies decode_utf8_qssl_string on the first element in the
 	 * given list. If the list is empty an empty String is returned.
 	 */

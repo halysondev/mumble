@@ -5,9 +5,9 @@
 
 #include "Themes.h"
 #include "MainWindow.h"
-#include "MumbleApplication.h"
 #include "Settings.h"
 #include "Global.h"
+#include "QtUtils.h"
 
 #ifdef Q_OS_MAC
 #	include <QProcess>
@@ -212,7 +212,7 @@ QVector< QDir > Themes::getSearchDirectories() {
 	// Built-in themes contained in the binary have the lowest priority
 	themeSearchDirectories << QDir(QLatin1String(":themes"));
 	// Next come themes found in the applications Themes directory
-	themeSearchDirectories << QDir(MumbleApplication::instance()->applicationVersionRootPath()
+	themeSearchDirectories << QDir(Mumble::QtUtils::applicationVersionRootPath()
 								   + QLatin1String("/Themes"));
 	// Highest priority have themes located in the user directory
 	themeSearchDirectories << getUserThemesDirectory();

@@ -27,6 +27,7 @@
 #include "ChannelListenerManager.h"
 #include "PluginManager.h"
 #include "ProtoUtils.h"
+#include "SDKHooks.h"
 #include "ServerHandler.h"
 #include "TalkingUI.h"
 #include "User.h"
@@ -1040,6 +1041,13 @@ void MainWindow::msgTextMessage(const MumbleProto::TextMessage &msg) {
 	Global::get().l->log(privateMessage ? Log::PrivateTextMessage : Log::TextMessage,
 						 tr("%1: %2").arg(prefixMessage).arg(u8(msg.message())), tr("Message from %1").arg(plainName),
 						 false, overrideTTS, pSrc ? pSrc->bLocalIgnoreTTS : false);
+
+	if (Mumble::SDK::Hooks::isClientActive()) {
+		Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::TextMessage,
+											QTextDocumentFragment::fromHtml(u8(msg.message())).toPlainText(), plainName,
+											pSrc ? static_cast< std::int64_t >(pSrc->uiSession) : 0,
+											privateMessage ? 1 : 0);
+	}
 }
 
 /// This message is being received when the server informs the client about the access control list (ACL) for

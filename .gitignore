@@ -51,3 +51,12 @@ compile_commands.json
 __pycache__/
 CMakeSettings.json
 CLAUDE.md
+build_env/
+build_env.7z
+build_release/
+build_debug/
+build-release/
+build-sdk-probe/
+build-static-probe/
+build-sdk-vs*/
+build-*/

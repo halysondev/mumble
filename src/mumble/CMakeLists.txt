@@ -15,16 +15,43 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/mumble.plist.in" "${MUMBLE_PLIST}")
 include(qt-utils)
 include(install-library)
 
-option(update "Check for updates by default." ON)
+set(_mumble_sdk_only OFF)
+if(sdk-client AND NOT client)
+	set(_mumble_sdk_only ON)
+endif()
 
-option(translations "Include languages other than English." ON)
-option(bundle-qt-translations "Bundle Qt's translations as well" ${static}) 
+set(_mumble_update_default ON)
+set(_mumble_translations_default ON)
+set(_mumble_bundle_qt_translations_default ${static})
+set(_mumble_bundled_speex_default ON)
+set(_mumble_rnnoise_default ON)
+set(_mumble_bundled_rnnoise_default ${rnnoise})
+set(_mumble_crash_report_default ON)
 
-option(bundled-speex "Build the included version of Speex instead of looking for one on the system." ON)
-option(rnnoise "Use RNNoise for machine learning noise reduction." ON)
-option(bundled-rnnoise "Build the included version of RNNoise instead of looking for one on the system." ${rnnoise})
+if(_mumble_sdk_only)
+	set(_mumble_update_default OFF)
+	set(_mumble_translations_default OFF)
+	set(_mumble_bundle_qt_translations_default OFF)
+	set(_mumble_bundled_speex_default OFF)
+	set(_mumble_rnnoise_default OFF)
+	set(_mumble_bundled_rnnoise_default OFF)
+	set(_mumble_crash_report_default OFF)
+endif()
 
-option(manual-plugin "Include the built-in \"manual\" positional audio plugin." ON)
+option(update "Check for updates by default." ${_mumble_update_default})
+
+option(translations "Include languages other than English." ${_mumble_translations_default})
+option(bundle-qt-translations "Bundle Qt's translations as well" ${_mumble_bundle_qt_translations_default}) 
+
+option(bundled-speex "Build the included version of Speex instead of looking for one on the system." ${_mumble_bundled_speex_default})
+option(rnnoise "Use RNNoise for machine learning noise reduction." ${_mumble_rnnoise_default})
+option(bundled-rnnoise "Build the included version of RNNoise instead of looking for one on the system." ${_mumble_bundled_rnnoise_default})
+
+set(_mumble_manual_plugin_default ON)
+if(sdk-client AND NOT client)
+	set(_mumble_manual_plugin_default OFF)
+endif()
+option(manual-plugin "Include the built-in \"manual\" positional audio plugin." ${_mumble_manual_plugin_default})
 
 option(qtspeech "Use Qt's text-to-speech system (part of the Qt Speech module) instead of Mumble's own OS-specific text-to-speech implementations." OFF)
 
@@ -67,7 +94,7 @@ if(NOT APPLE)
 endif()
 
 if(WIN32 OR APPLE)
-	option(crash-report "Include support for reporting crashes to the Mumble developers." ON)
+	option(crash-report "Include support for reporting crashes to the Mumble developers." ${_mumble_crash_report_default})
 endif()
 
 if(MSVC)
@@ -344,7 +371,11 @@ set(MUMBLE_SOURCES
 )
 
 add_library(smallft STATIC "${3RDPARTY_DIR}/smallft/smallft.cpp")
-target_include_directories(smallft PUBLIC "${3RDPARTY_DIR}/smallft")
+target_include_directories(smallft
+	PUBLIC
+		$<BUILD_INTERFACE:${3RDPARTY_DIR}/smallft>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 target_disable_warnings(smallft)
 
 add_custom_command(
@@ -355,14 +386,16 @@ add_custom_command(
 )
 list(APPEND MUMBLE_SOURCES "${CMAKE_BINARY_DIR}/mumble_flags.qrc")
 
-add_library(mumble_client_object_lib OBJECT ${MUMBLE_SOURCES})
+add_library(mumble_client_object_lib STATIC ${MUMBLE_SOURCES})
 target_link_libraries(mumble_client_object_lib PUBLIC smallft)
 
-if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-	# We don't want the console to appear in release builds.
-	add_executable(mumble WIN32 "main.cpp")
-else()
-	add_executable(mumble "main.cpp")
+if(client)
+	if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+		# We don't want the console to appear in release builds.
+		add_executable(mumble WIN32 "main.cpp")
+	else()
+		add_executable(mumble "main.cpp")
+	endif()
 endif()
 
 if(WIN32)
@@ -372,10 +405,10 @@ if(WIN32)
 			"${MUMBLE_RC}"
 	)
 
-	if(elevation)
+	if(client AND elevation)
 		set_property(TARGET mumble APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level=\'asInvoker\' uiAccess=\'true\'\"")
 	endif()
-elseif(APPLE)
+elseif(APPLE AND client)
 	set_target_properties(mumble
 		PROPERTIES
 			OUTPUT_NAME "Mumble"
@@ -393,11 +426,15 @@ add_custom_command(
 	COMMENT "Generating ApplicationPalette.h"
 	DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ApplicationPaletteTemplate.h"
 )
-target_sources(mumble PRIVATE "ApplicationPalette.h")
-target_include_directories(mumble PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+if(client)
+	target_sources(mumble PRIVATE "ApplicationPalette.h")
+	target_include_directories(mumble PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 
-target_link_libraries(mumble PRIVATE mumble_client_object_lib shared spdlog::spdlog)
-target_link_libraries(mumble PRIVATE CLI11::CLI11)
+if(client)
+	target_link_libraries(mumble PRIVATE mumble_client_object_lib shared spdlog::spdlog)
+	target_link_libraries(mumble PRIVATE CLI11::CLI11)
+endif()
 
 target_compile_definitions(mumble_client_object_lib
 	PUBLIC
@@ -405,7 +442,9 @@ target_compile_definitions(mumble_client_object_lib
 	"MUMBLE_PLUGIN_PATH=${MUMBLE_INSTALL_ABS_PLUGINDIR}"
 )
 
-set_target_properties(mumble PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+if(client)
+	set_target_properties(mumble PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()
 
 set_target_properties(mumble_client_object_lib
 	PROPERTIES
@@ -414,20 +453,24 @@ set_target_properties(mumble_client_object_lib
 		AUTOUIC ON
 )
 
-set_target_properties(mumble
-	PROPERTIES
-		AUTOMOC ON
-		AUTORCC ON
-		AUTOUIC ON
-)
+if(client)
+	set_target_properties(mumble
+		PROPERTIES
+			AUTOMOC ON
+			AUTORCC ON
+			AUTOUIC ON
+	)
+endif()
 
-if(WIN32)
-	install(TARGETS mumble RUNTIME DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_client)
-else()
-	if(NOT APPLE)
+if(client)
+	if(WIN32)
 		install(TARGETS mumble RUNTIME DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_client)
 	else()
-		install(TARGETS mumble BUNDLE DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_client)
+		if(NOT APPLE)
+			install(TARGETS mumble RUNTIME DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_client)
+		else()
+			install(TARGETS mumble BUNDLE DESTINATION "${MUMBLE_INSTALL_EXECUTABLEDIR}" COMPONENT mumble_client)
+		endif()
 	endif()
 endif()
 
@@ -445,10 +488,11 @@ target_compile_definitions(mumble_client_object_lib
 
 target_include_directories(mumble_client_object_lib
 	PUBLIC
-		${CMAKE_CURRENT_SOURCE_DIR} # This is required for includes in current folder to be found by files from the shared directory.
-		"widgets"
-		${SHARED_SOURCE_DIR}
-		"${PLUGINS_DIR}"
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/widgets>
+		$<BUILD_INTERFACE:${SHARED_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${PLUGINS_DIR}>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 find_pkg(Poco
@@ -531,7 +575,7 @@ if (NOT TARGET nlohmann_json)
 	endif()
 endif()
 
-target_link_libraries(mumble_client_object_lib PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(mumble_client_object_lib PRIVATE nlohmann_json::nlohmann_json)
 
 find_pkg("SndFile;LibSndFile;sndfile" REQUIRED)
 
@@ -563,11 +607,12 @@ endif()
 target_link_libraries(mumble_client_object_lib
 	PUBLIC
 		shared
-		utfcpp
 		Qt6::Concurrent
 		Qt6::Sql
 		Qt6::Svg
 		Qt6::Widgets
+	PRIVATE
+		utfcpp
 )
 
 if(static)
@@ -631,8 +676,9 @@ if(WIN32)
 
 	target_link_libraries(mumble_client_object_lib
 		PUBLIC
-			SPSCQueue
 			xinputcheck
+		PRIVATE
+			SPSCQueue
 	)
 
 	if(MSVC)
@@ -901,7 +947,9 @@ if(overlay)
 				"Overlay_win.h"
 		)
 
-		add_dependencies(mumble overlay)
+		if(client)
+			add_dependencies(mumble overlay)
+		endif()
 	else()
 		if(APPLE)
 			target_sources(mumble_client_object_lib PRIVATE "Overlay_macx.mm")
@@ -909,7 +957,7 @@ if(overlay)
 			target_sources(mumble_client_object_lib PRIVATE "Overlay_unix.cpp")
 		endif()
 
-                if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
+                if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64" AND client)
 			add_dependencies(mumble overlay_gl)
 		endif()
 	endif()
@@ -917,7 +965,7 @@ if(overlay)
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_OVERLAY")
 endif()
 
-if(plugins)
+if(plugins AND client)
 	add_dependencies(mumble plugins)
 endif()
 
@@ -948,8 +996,10 @@ if(g15)
 				"G15LCDEngine_helper.cpp"
 				"G15LCDEngine_helper.h"
 		)
-	target_include_directories(mumble_client_object_lib PUBLIC "${CMAKE_SOURCE_DIR}/helpers")
-	add_dependencies(mumble g15-helper)
+		target_include_directories(mumble_client_object_lib PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/helpers>)
+	if(client)
+		add_dependencies(mumble g15-helper)
+	endif()
 	else()
 		find_library(LIB_G15DAEMON_CLIENT "g15daemon_client")
 		if(LIB_G15DAEMON_CLIENT-NOTFOUND)
@@ -996,7 +1046,7 @@ if(zeroconf)
 	)
 
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_ZEROCONF")
-	target_include_directories(mumble_client_object_lib PUBLIC "${3RDPARTY_DIR}/qqbonjour")
+	target_include_directories(mumble_client_object_lib PUBLIC $<BUILD_INTERFACE:${3RDPARTY_DIR}/qqbonjour>)
 endif()
 
 if(alsa)
@@ -1026,9 +1076,9 @@ if(asio)
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_ASIO")
 	target_include_directories(mumble_client_object_lib
 		SYSTEM PUBLIC
-			"${ASIO_DIR}/common"
-			"${ASIO_DIR}/host"
-			"${ASIO_DIR}/host/pc"
+			$<BUILD_INTERFACE:${ASIO_DIR}/common>
+			$<BUILD_INTERFACE:${ASIO_DIR}/host>
+			$<BUILD_INTERFACE:${ASIO_DIR}/host/pc>
 	)
 endif()
 
@@ -1058,7 +1108,7 @@ if(jackaudio)
 	)
 
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_JACKAUDIO")
-	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC "${3RDPARTY_DIR}/jack")
+	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC $<BUILD_INTERFACE:${3RDPARTY_DIR}/jack>)
 endif()
 
 if(oss)
@@ -1069,7 +1119,7 @@ if(oss)
 	)
 
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_OSS")
-	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC "/usr/lib/oss/include")
+	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC $<BUILD_INTERFACE:/usr/lib/oss/include>)
 endif()
 
 if(pipewire)
@@ -1080,7 +1130,7 @@ if(pipewire)
 	)
 
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_PIPEWIRE")
-	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC "${3RDPARTY_DIR}/pipewire")
+	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC $<BUILD_INTERFACE:${3RDPARTY_DIR}/pipewire>)
 endif()
 
 if(portaudio)
@@ -1091,7 +1141,7 @@ if(portaudio)
 	)
 
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_PORTAUDIO")
-	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC "${3RDPARTY_DIR}/portaudio")
+	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC $<BUILD_INTERFACE:${3RDPARTY_DIR}/portaudio>)
 endif()
 
 if(pulseaudio)
@@ -1102,7 +1152,7 @@ if(pulseaudio)
 	)
 
 	target_compile_definitions(mumble_client_object_lib PUBLIC "USE_PULSEAUDIO")
-	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC "${3RDPARTY_DIR}/pulseaudio")
+	target_include_directories(mumble_client_object_lib SYSTEM PUBLIC $<BUILD_INTERFACE:${3RDPARTY_DIR}/pulseaudio>)
 endif()
 
 if(wasapi)
@@ -1185,7 +1235,7 @@ target_include_directories(${TARGET_NAME} INTERFACE
   $<BUILD_INTERFACE:${AUTOGEN_INCLUDE_DIR}>
 )
 
-if(packaging AND WIN32)
+if(client AND packaging AND WIN32)
 	set(overlay ON)
 	set(plugins ON)
 

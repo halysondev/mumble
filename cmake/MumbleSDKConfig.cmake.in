@@ -1,0 +1,58 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Qt6 COMPONENTS Core Network Xml Concurrent Sql Svg Widgets)
+find_dependency(OpenSSL COMPONENTS Crypto SSL)
+find_dependency(Protobuf)
+find_dependency(Boost 1.62.0 COMPONENTS system thread date_time)
+find_dependency(BZip2)
+find_dependency(Poco COMPONENTS XML Zip)
+find_dependency(spdlog)
+find_dependency(SndFile QUIET)
+find_dependency(sndfile QUIET)
+find_dependency(Ice COMPONENTS Ice IceSSL OPTIONAL_COMPONENTS IceDiscovery IceLocatorDiscovery IceUtil)
+
+set(_MUMBLESDK_LIBDIR "@MUMBLE_INSTALL_LIBDIR@")
+
+function(_mumblesdk_define_imported_static target_name base_name)
+	if(TARGET ${target_name})
+		return()
+	endif()
+
+	set(_candidate "${PACKAGE_PREFIX_DIR}/${_MUMBLESDK_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${base_name}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+	if(EXISTS "${_candidate}")
+		add_library(${target_name} STATIC IMPORTED)
+		set_target_properties(${target_name} PROPERTIES IMPORTED_LOCATION "${_candidate}")
+	endif()
+endfunction()
+
+_mumblesdk_define_imported_static(Tracy::TracyClient "TracyClient")
+_mumblesdk_define_imported_static(SOCI::Core "soci_core")
+_mumblesdk_define_imported_static(SOCI::MySQL "soci_mysql")
+_mumblesdk_define_imported_static(SOCI::PostgreSQL "soci_postgresql")
+_mumblesdk_define_imported_static(SOCI::SQLite3 "soci_sqlite3")
+
+if(NOT TARGET Tracy::TracyClient)
+	add_library(Tracy::TracyClient INTERFACE IMPORTED)
+endif()
+
+if(NOT TARGET SOCI::Core)
+	add_library(SOCI::Core INTERFACE IMPORTED)
+endif()
+if(NOT TARGET SOCI::MySQL)
+	add_library(SOCI::MySQL INTERFACE IMPORTED)
+endif()
+if(NOT TARGET SOCI::PostgreSQL)
+	add_library(SOCI::PostgreSQL INTERFACE IMPORTED)
+endif()
+if(NOT TARGET SOCI::SQLite3)
+	add_library(SOCI::SQLite3 INTERFACE IMPORTED)
+endif()
+if(NOT TARGET SOCI::soci)
+	add_library(SOCI::soci INTERFACE IMPORTED)
+endif()
+
+set_property(TARGET SOCI::soci PROPERTY INTERFACE_LINK_LIBRARIES "SOCI::Core;SOCI::MySQL;SOCI::PostgreSQL;SOCI::SQLite3")
+
+include("${CMAKE_CURRENT_LIST_DIR}/MumbleSDKTargets.cmake")

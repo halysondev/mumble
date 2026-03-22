@@ -6,8 +6,13 @@
 option(bundled-soci "Build the included version of SOCI instead of looking for one on the system" ON)
 
 option(enable-sqlite "Whether or not to enable the SQLite database backend" ON)
-option(enable-mysql "Whether or not to enable the MySQL database backend" ${server})
-option(enable-postgresql "Whether or not to enable the PostgreSQL database backend" ${server})
+set(_mumble_enable_network_databases_default ${server})
+if(sdk-server)
+	set(_mumble_enable_network_databases_default ON)
+endif()
+
+option(enable-mysql "Whether or not to enable the MySQL database backend" ${_mumble_enable_network_databases_default})
+option(enable-postgresql "Whether or not to enable the PostgreSQL database backend" ${_mumble_enable_network_databases_default})
 
 add_library(mumble_database STATIC
 	"Backend.cpp"
@@ -31,7 +36,11 @@ add_library(mumble_database STATIC
 	"Version.cpp"
 )
 
-target_include_directories(mumble_database PUBLIC "${CMAKE_SOURCE_DIR}/src")
+target_include_directories(mumble_database
+	PUBLIC
+		$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 if (NOT enable-sqlite)
 	target_compile_definitions(mumble_database PUBLIC MUMBLE_DISABLE_SQLITE)
@@ -90,4 +99,4 @@ if (NOT TARGET nlohmann_json)
 	endif()
 endif()
 
-target_link_libraries(mumble_database PUBLIC nlohmann_json)
+target_link_libraries(mumble_database PRIVATE nlohmann_json)

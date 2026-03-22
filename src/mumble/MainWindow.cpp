@@ -38,6 +38,7 @@
 #include "PositionalAudioViewer.h"
 #include "QtWidgetUtils.h"
 #include "RichTextEditor.h"
+#include "SDKHooks.h"
 #include "Screen.h"
 #include "SearchDialog.h"
 #include "ServerHandler.h"
@@ -650,6 +651,10 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::msgBox(QString msg) {
+	if (Mumble::SDK::Hooks::isClientActive()) {
+		Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::Warning, msg);
+	}
+
 	MessageBoxEvent *mbe = new MessageBoxEvent(msg);
 	QApplication::postEvent(this, mbe);
 }
@@ -3563,6 +3568,8 @@ void MainWindow::serverConnected() {
 }
 
 void MainWindow::serverDisconnected(QAbstractSocket::SocketError err, QString reason) {
+	const bool sdkClientActive = Mumble::SDK::Hooks::isClientActive();
+
 	// clear ChannelListener
 	Global::get().channelListenerManager->clear();
 
@@ -3682,61 +3689,80 @@ void MainWindow::serverDisconnected(QAbstractSocket::SocketError err, QString re
 				qsl << QString::fromLatin1("<li>%1</li>").arg(e.errorString().toHtmlEscaped());
 			}
 
-			QMessageBox qmb(QMessageBox::Warning, QLatin1String("Mumble"),
-							tr("<p>%1</p><ul>%2</ul><p>The specific errors with this certificate are:</p><ol>%3</ol>"
-							   "<p>Do you wish to accept this certificate anyway?<br />(It will also be stored so you "
-							   "won't be asked this again.)</p>")
-								.arg(basereason)
-								.arg(digests_section)
-								.arg(qsl.join(QString())),
-							QMessageBox::Yes | QMessageBox::No, this);
-
-			qmb.setDefaultButton(QMessageBox::No);
-			qmb.setEscapeButton(QMessageBox::No);
-
-			QPushButton *qp = qmb.addButton(tr("&View Certificate"), QMessageBox::ActionRole);
-			forever {
-				int res = qmb.exec();
-
-				if ((res == 0) && (qmb.clickedButton() == qp)) {
-					ViewCert vc(Global::get().sh->qscCert, this);
-					vc.exec();
-					continue;
-				} else if (res == QMessageBox::Yes) {
+			if (sdkClientActive) {
+				if (Mumble::SDK::Hooks::clientAutoAcceptInvalidCertificates()) {
 					Global::get().db->setDigest(host, port,
 												QString::fromLatin1(c.digest(QCryptographicHash::Sha1).toHex()));
 					qaServerDisconnect->setEnabled(true);
 					on_Reconnect_timeout();
+				} else {
+					Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr,
+														basereason, qsl.join(QStringLiteral("\n")),
+														static_cast< std::int64_t >(err));
 				}
-				break;
+			} else {
+				QMessageBox qmb(QMessageBox::Warning, QLatin1String("Mumble"),
+								tr("<p>%1</p><ul>%2</ul><p>The specific errors with this certificate are:</p><ol>%3</ol>"
+								   "<p>Do you wish to accept this certificate anyway?<br />(It will also be stored so you "
+								   "won't be asked this again.)</p>")
+									.arg(basereason)
+									.arg(digests_section)
+									.arg(qsl.join(QString())),
+								QMessageBox::Yes | QMessageBox::No, this);
+
+				qmb.setDefaultButton(QMessageBox::No);
+				qmb.setEscapeButton(QMessageBox::No);
+
+				QPushButton *qp = qmb.addButton(tr("&View Certificate"), QMessageBox::ActionRole);
+				forever {
+					int res = qmb.exec();
+
+					if ((res == 0) && (qmb.clickedButton() == qp)) {
+						ViewCert vc(Global::get().sh->qscCert, this);
+						vc.exec();
+						continue;
+					} else if (res == QMessageBox::Yes) {
+						Global::get().db->setDigest(host, port,
+													QString::fromLatin1(c.digest(QCryptographicHash::Sha1).toHex()));
+						qaServerDisconnect->setEnabled(true);
+						on_Reconnect_timeout();
+					}
+					break;
+				}
 			}
 		}
 	} else if (err == QAbstractSocket::SslHandshakeFailedError) {
-		QMessageBox msgBox;
-		msgBox.addButton(QMessageBox::Ok);
-		msgBox.setIcon(QMessageBox::Warning);
-		msgBox.setTextFormat(Qt::RichText);
-		msgBox.setWindowTitle(tr("SSL error"));
-		msgBox.setText(tr("Mumble is unable to establish a secure connection to the server. (\"%1\")").arg(reason));
-		// clang-format off
-		msgBox.setInformativeText(
-			tr("This could be caused by one of the following scenarios:"
-			   "<ul>"
-			       "<li>Your client and the server use different encryption standards. This could be because you are using "
-			       "a very old client or the server you are connecting to is very old. In the first case, you should update "
-			       "your client and in the second case you should contact the server administrator so that they can update "
-				   "their server.</li>"
-				   "<li>Either your client or the server is using an old operating system that doesn't provide up-to-date "
-				   "encryption methods. In this case you should consider updating your OS or contacting the server admin "
-				   "so that they can update theirs.</li>"
-				   "<li>The server you are connecting to isn't actually a Mumble server. Please ensure that the used server "
-				   "address really belongs to a Mumble server and not e.g. to a game server.</li>"
-				   "<li>The port you are connecting to does not belong to a Mumble server but instead is bound to a "
-				   "completely unrelated process on the server-side. Please double-check you have used the correct port.</li>"
-				"</ul>"));
-		// clang-format on
+		if (sdkClientActive) {
+			Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr, reason,
+												tr("Mumble is unable to establish a secure connection to the server."),
+												static_cast< std::int64_t >(err));
+		} else {
+			QMessageBox msgBox;
+			msgBox.addButton(QMessageBox::Ok);
+			msgBox.setIcon(QMessageBox::Warning);
+			msgBox.setTextFormat(Qt::RichText);
+			msgBox.setWindowTitle(tr("SSL error"));
+			msgBox.setText(tr("Mumble is unable to establish a secure connection to the server. (\"%1\")").arg(reason));
+			// clang-format off
+			msgBox.setInformativeText(
+				tr("This could be caused by one of the following scenarios:"
+				   "<ul>"
+				       "<li>Your client and the server use different encryption standards. This could be because you are using "
+				       "a very old client or the server you are connecting to is very old. In the first case, you should update "
+				       "your client and in the second case you should contact the server administrator so that they can update "
+					   "their server.</li>"
+					   "<li>Either your client or the server is using an old operating system that doesn't provide up-to-date "
+					   "encryption methods. In this case you should consider updating your OS or contacting the server admin "
+					   "so that they can update theirs.</li>"
+					   "<li>The server you are connecting to isn't actually a Mumble server. Please ensure that the used server "
+					   "address really belongs to a Mumble server and not e.g. to a game server.</li>"
+					   "<li>The port you are connecting to does not belong to a Mumble server but instead is bound to a "
+					   "completely unrelated process on the server-side. Please double-check you have used the correct port.</li>"
+					"</ul>"));
+			// clang-format on
 
-		msgBox.exec();
+			msgBox.exec();
+		}
 	} else {
 		if (!reason.isEmpty()) {
 			Global::get().l->log(Log::ServerDisconnected,
@@ -3750,19 +3776,43 @@ void MainWindow::serverDisconnected(QAbstractSocket::SocketError err, QString re
 
 		switch (rtLast) {
 			case MumbleProto::Reject_RejectType_InvalidUsername:
-				(new FailedConnectionDialog(std::move(details), ConnectionFailType::InvalidUsername, this))->show();
+				if (sdkClientActive) {
+					Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr,
+														tr("Invalid username"), reason,
+														static_cast< std::int64_t >(rtLast));
+				} else {
+					(new FailedConnectionDialog(std::move(details), ConnectionFailType::InvalidUsername, this))->show();
+				}
 				break;
 			case MumbleProto::Reject_RejectType_UsernameInUse:
-				(new FailedConnectionDialog(std::move(details), ConnectionFailType::UsernameAlreadyInUse, this))
-					->show();
+				if (sdkClientActive) {
+					Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr,
+														tr("Username already in use"), reason,
+														static_cast< std::int64_t >(rtLast));
+				} else {
+					(new FailedConnectionDialog(std::move(details), ConnectionFailType::UsernameAlreadyInUse, this))
+						->show();
+				}
 				break;
 			case MumbleProto::Reject_RejectType_WrongUserPW:
-				(new FailedConnectionDialog(std::move(details), ConnectionFailType::AuthenticationFailure, this))
-					->show();
+				if (sdkClientActive) {
+					Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr,
+														tr("Authentication failure"), reason,
+														static_cast< std::int64_t >(rtLast));
+				} else {
+					(new FailedConnectionDialog(std::move(details), ConnectionFailType::AuthenticationFailure, this))
+						->show();
+				}
 				break;
 			case MumbleProto::Reject_RejectType_WrongServerPW:
-				(new FailedConnectionDialog(std::move(details), ConnectionFailType::InvalidServerPassword, this))
-					->show();
+				if (sdkClientActive) {
+					Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr,
+														tr("Invalid server password"), reason,
+														static_cast< std::int64_t >(rtLast));
+				} else {
+					(new FailedConnectionDialog(std::move(details), ConnectionFailType::InvalidServerPassword, this))
+						->show();
+				}
 				break;
 			default:
 				if (Global::get().s.bReconnect && !reason.isEmpty()) {
@@ -3780,6 +3830,11 @@ void MainWindow::serverDisconnected(QAbstractSocket::SocketError err, QString re
 		qdwMinimalViewNote->show();
 	}
 
+	if (sdkClientActive) {
+		Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::Disconnected, reason, QString(),
+											static_cast< std::int64_t >(err));
+	}
+
 	emit disconnectedFromServer();
 }
 
@@ -3795,6 +3850,10 @@ void MainWindow::resolverError(QAbstractSocket::SocketError, QString reason) {
 		if (bRetryServer) {
 			qtReconnect->start();
 		}
+	}
+
+	if (Mumble::SDK::Hooks::isClientActive()) {
+		Mumble::SDK::Hooks::emitClientEvent(Mumble::SDK::Hooks::ClientEventType::ConnectionErr, reason);
 	}
 }
 

@@ -79,6 +79,7 @@ set(SHARED_SOURCES
 	"ServerAddress.cpp"
 	"ServerResolver.cpp"
 	"ServerResolverRecord.cpp"
+	"SDKHooks.cpp"
 	"SSL.cpp"
 	"SSLLocks.cpp"
 	"Timer.cpp"
@@ -116,6 +117,7 @@ set(SHARED_HEADERS
 	"ServerAddress.h"
 	"ServerResolver.h"
 	"ServerResolverRecord.h"
+	"SDKHooks.h"
 	"SSL.h"
 	"SSLLocks.h"
 	"Timer.h"
@@ -172,8 +174,9 @@ target_compile_definitions(shared
 
 target_include_directories(shared
 	PUBLIC
-		${CMAKE_CURRENT_SOURCE_DIR}
-		${CMAKE_CURRENT_BINARY_DIR}
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 	PRIVATE
 		"${3RDPARTY_DIR}/arc4random"
 )
@@ -230,18 +233,22 @@ else()
 	find_pkg("CLI11" 2 REQUIRED)
 endif()
 
-if(client)
+if(client OR sdk-client)
 	add_subdirectory(mumble)
 
-	if(UNIX AND NOT APPLE)
+	if(client AND UNIX AND NOT APPLE)
 		install(FILES "${CMAKE_SOURCE_DIR}/icons/mumble.svg" DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps")
 		install(FILES "${CMAKE_SOURCE_DIR}/icons/mumble_256x256.png" DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/256x256/apps" RENAME "mumble.png")
 	endif()
 endif()
 
-if(server)
+if(server OR sdk-server)
 	add_subdirectory(database)
 	add_subdirectory(murmur)
+endif()
+
+if(sdk-client OR sdk-server)
+	add_subdirectory(sdk)
 endif()
 
 if(tests)

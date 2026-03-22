@@ -8,7 +8,7 @@
 
 #include <QtGlobal>
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(MUMBLE_SERVER_NO_GUI)
 #	include <QApplication>
 #else
 #	include <QCoreApplication>
@@ -17,7 +17,7 @@
 class QObject;
 class QEvent;
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(MUMBLE_SERVER_NO_GUI)
 class ServerApplication : public QApplication {
 #else
 class ServerApplication : public QCoreApplication {
@@ -25,7 +25,7 @@ class ServerApplication : public QCoreApplication {
 	Q_OBJECT
 
 public:
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(MUMBLE_SERVER_NO_GUI)
 	using QApplication::QApplication;
 #else
 	using QCoreApplication::QCoreApplication;
